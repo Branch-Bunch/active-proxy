@@ -23,7 +23,7 @@ defmodule ActiveProxy.Proxy do
 
   defp start_serve_process(socket) do
     {:ok, pid} =
-      Task.Supervisor.start_child(ExTcp.TaskSupervisor, fn ->
+      Task.Supervisor.start_child(ActiveProxy.TaskSupervisor, fn ->
         serve(socket)
       end)
 
@@ -32,9 +32,27 @@ defmodule ActiveProxy.Proxy do
 
   defp serve(socket) do
     packet = read(socket)
-    # TODO: Forward packets
-    write(socket, "echoing: #{packet}")
 
+    # TODO: cache the socket connection
+    # TODO: make the host configurable
+    {:ok, upsteam_socket} =
+      :gen_tcp.connect(
+        '159.203.44.11',
+        4000,
+        [
+          :binary,
+          packet: :line,
+          active: false,
+          reuseaddr: true
+        ],
+        1000
+      )
+
+    # forward
+    write(upsteam_socket, packet)
+    payload = read(upsteam_socket)
+
+    write(socket, payload)
     serve(socket)
   end
 
