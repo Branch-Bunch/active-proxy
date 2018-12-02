@@ -1,4 +1,6 @@
 defmodule ActiveProxy.Proxy do
+  require Logger
+
   def listen(port) do
     # `:binary` - receives data as binaries (instead of lists)
     # `packet: :line` - receives data line by line
