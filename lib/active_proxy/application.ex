@@ -4,10 +4,11 @@ defmodule ActiveProxy.Application do
 
   def start(_type, _args) do
     children = [
-      {Plug.Cowboy, scheme: :http, plug: ActiveProxy.Proxy, options: [port: 8080]}
+      {Task.Supervisor, name: ActiveProxy.TaskSupervisor},
+      Supervisor.child_spec({Task, fn -> ActiveProxy.Proxy.listen(8080) end}, restart: :permanent)
     ]
 
-    Logger.info("Starting application...")
+    Logger.info("Starting Proxy...")
 
     Supervisor.start_link(children, strategy: :one_for_one)
   end
