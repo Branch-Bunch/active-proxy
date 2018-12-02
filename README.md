@@ -1,21 +1,19 @@
 # ActiveProxy
 
-**TODO: Add description**
+## Assumptions
+- The application process can only run one active node at a time.
+- All nodes are running already running the application process.
+- The application process only writes when receiving requests.
 
-## Installation
+## Automatically Detecting When to Fail-over
+TODO
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `active_proxy` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:active_proxy, "~> 0.1.0"}
-  ]
-end
-```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/active_proxy](https://hexdocs.pm/active_proxy).
-
+## Fail-over Process
+1. Pause in flight requests incoming to proxy
+1. Wait the sync timeout to make sure nodes caught up
+1. Send SIGTERM to active node to flush
+1. Kill active node's sync
+1. Treat inactive as active, route the requests to it
+1. Configure tail node to sync to what was originally the active node
+1. Enqueue previous active node to the upstream hosts
+1. Finished
