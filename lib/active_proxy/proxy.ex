@@ -50,6 +50,7 @@ defmodule ActiveProxy.Proxy do
 
     if {ok, packet} == {:error, :closed} do
       # If reading from socket closed exit serve loop
+      # TODO:
       # Should probably log error
       #
       #
@@ -58,13 +59,10 @@ defmodule ActiveProxy.Proxy do
       # TODO: Handle failure to write to application
       write(upstream_socket, packet)
 
-      case read(upstream_socket, timeout) do
-        {:ok, payload} ->
-          write(socket, payload)
+      {status, payload} = read(upstream_socket, timeout)
 
-        {:error, _} ->
-          # shutdown writes to signal that no more data is to be sent and wait for the read side of the socket to be closed
-          :gen_tcp.shutdown(socket, :write)
+      if status == :ok do
+        write(socket, payload)
       end
 
       serve(socket, upstream_socket)
@@ -80,8 +78,10 @@ defmodule ActiveProxy.Proxy do
       {:ok, packet} ->
         {:ok, packet}
 
-      {:error, timeout} ->
-        {:error, timeout}
+      {:error, reason} ->
+        # shutdown writes to signal that no more data is to be sent and wait for the read side of the socket to be closed
+        :gen_tcp.shutdown(socket, :write)
+        {:error, reason}
     end
   end
 
