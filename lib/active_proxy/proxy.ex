@@ -22,12 +22,16 @@ defmodule ActiveProxy.Proxy do
   end
 
   defp start_serve_process(socket) do
+    timeout = Application.get_env(:active_proxy, :timeout)
+    application_address = Application.get_env(:active_proxy, :node1_address)
+    Logger.info("Forwarding to application at #{application_address} with timout of #{timeout}ms")
+
     {:ok, pid} =
       Task.Supervisor.start_child(ActiveProxy.TaskSupervisor, fn ->
         # TODO: make the host configurable
         {:ok, upstream_socket} =
           :gen_tcp.connect(
-            '159.203.44.11',
+            to_charlist(application_address),
             4000,
             [
               :binary,
@@ -38,54 +42,26 @@ defmodule ActiveProxy.Proxy do
             1000
           )
 
-        serve(socket, upstream_socket)
+        serve(socket, upstream_socket, timeout)
       end)
 
     :ok = :gen_tcp.controlling_process(socket, pid)
   end
 
-  defp serve(socket, upstream_socket) do
-    timeout = 10
-    {ok, packet} = read(socket)
-
-    if {ok, packet} == {:error, :closed} do
-      # If reading from socket closed exit serve loop
-      # Should probably log error
-      #
-      #
-      # Also handle other types of errors other than :closed
+  defp serve(client_socket, upstream_socket, timeout) do
+    with {:ok, packet} <- :gen_tcp.recv(client_socket, 0),
+         :ok <- :gen_tcp.send(upstream_socket, packet),
+         {:ok, packet} <- :gen_tcp.recv(upstream_socket, 0, timeout),
+         :ok <- :gen_tcp.send(client_socket, packet) do
+      serve(client_socket, upstream_socket, timeout)
     else
-      # TODO: Handle failure to write to application
-      write(upstream_socket, packet)
+      {:error, :closed} ->
+        nil
 
-      case read(upstream_socket, timeout) do
-        {:ok, payload} ->
-          write(socket, payload)
-
-        {:error, _} ->
-          # shutdown writes to signal that no more data is to be sent and wait for the read side of the socket to be closed
-          :gen_tcp.shutdown(socket, :write)
-      end
-
-      serve(socket, upstream_socket)
+      # TODO: Handle errors
+      # Consider doing a failover
+      _ ->
+        nil
     end
-  end
-
-  defp read(socket) do
-    :gen_tcp.recv(socket, 0)
-  end
-
-  defp read(socket, timeout) do
-    case :gen_tcp.recv(socket, 0, timeout) do
-      {:ok, packet} ->
-        {:ok, packet}
-
-      {:error, timeout} ->
-        {:error, timeout}
-    end
-  end
-
-  defp write(socket, packet) do
-    :gen_tcp.send(socket, packet)
   end
 end
