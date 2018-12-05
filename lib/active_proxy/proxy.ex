@@ -49,20 +49,13 @@ defmodule ActiveProxy.Proxy do
   end
 
   defp serve(socket, upstream_socket, timeout) do
+    read_from_client(socket, upstream_socket, timeout)
+  end
+
+  defp read_from_client(socket, upstream_socket, timeout) do
     case :gen_tcp.recv(socket, 0) do
       {:ok, packet} ->
-        # TODO: Handle failure to write to application
-        write(upstream_socket, packet)
-
-        case :gen_tcp.recv(upstream_socket, 0, timeout) do
-          {:ok, packet} ->
-            write(socket, packet)
-            serve(socket, upstream_socket, timeout)
-
-          {:error, :timeout} ->
-            # TODO: Consider failing over to different upstream node
-            nil
-        end
+        packet |> forward_to_upstream(upstream_socket, socket, timeout)
 
       {:error, :closed} ->
         # In case of socket being closed exit serve loop
@@ -72,7 +65,26 @@ defmodule ActiveProxy.Proxy do
     end
   end
 
-  defp write(socket, packet) do
+  defp forward_to_upstream(packet, upstream_socket, socket, timeout) do
+    # TODO: Handle failure to write to application
+    write(packet, upstream_socket)
+
+    case :gen_tcp.recv(upstream_socket, 0, timeout) do
+      {:ok, packet} ->
+        packet |> write_to_client(upstream_socket, socket, timeout)
+
+      {:error, :timeout} ->
+        # TODO: Consider failing over to different upstream node
+        nil
+    end
+  end
+
+  defp write_to_client(packet, upstream_socket, socket, timeout) do
+    write(packet, socket)
+    serve(socket, upstream_socket, timeout)
+  end
+
+  defp write(packet, socket) do
     :gen_tcp.send(socket, packet)
   end
 end
